@@ -1,0 +1,84 @@
+# NekoWatch — источники логов (Wazuh / Logener) + real-time API
+#
+# Укажите, какие файлы слушать. Можно включить несколько источников сразу
+# (у каждого свой checkpoint в БД). Для демо оставьте logener.
+#
+# Форматы файлов:
+#   ndjson — JSON по одной строке (alerts.json, archives.json, Logener)
+#   plain  — классический alerts.log Wazuh (многострочные блоки ** Alert)
+#
+# Реальный Wazuh (Linux):
+#   active: [alerts_json]           # рекомендуется
+#   active: [alerts_json, archives_json]
+#   active: [alerts_log]            # текстовый формат
+#
+# Real-time API (poll):
+#   api_active: [wazuh_manager]     # опрос Wazuh Manager REST API
+#   api_active: [http_json]         # любой HTTP JSON/NDJSON endpoint
+# Пароль/токен лучше через env:
+#   NEKOWATCH_API_SOURCE_WAZUH_MANAGER_PASSWORD=...
+#   NEKOWATCH_API_SOURCE_WAZUH_MANAGER_TOKEN=...
+# Push (webhook): POST /api/v1/ingest/alerts  (+ опционально NEKOWATCH_INGEST_PUSH_TOKEN)
+
+active:
+  - logener
+  # Раскомментируйте для реального Wazuh:
+  # - alerts_json
+  # - alerts_log
+  # - archives_json
+
+sources:
+  logener:
+    # Windows-демо часто лежит в C:\tmp\...; на Linux — /tmp/...
+    path: /tmp/wazuh_logs/wazuh_alerts.json
+    format: ndjson
+    description: "Демо-поток Logener"
+
+  alerts_json:
+    path: /var/ossec/logs/alerts/alerts.json
+    format: ndjson
+    description: "Wazuh alerts в JSON (рекомендуемый источник для SOC)"
+
+  alerts_log:
+    path: /var/ossec/logs/alerts/alerts.log
+    format: plain
+    description: "Wazuh alerts.log (текстовый формат)"
+
+  archives_json:
+    path: /var/ossec/logs/archives/archives.json
+    format: ndjson
+    description: "Wazuh archives (полный архив событий)"
+
+# ---------------------------------------------------------------------------
+# Real-time API / HTTP pollers (optional)
+# Добавьте имя в api_active, чтобы запустить фоновый опрос.
+# ---------------------------------------------------------------------------
+api_active: []
+# - wazuh_manager
+# - http_json
+
+api_defaults:
+  poll_interval: 5
+  timeout: 30
+  max_batch: 500
+
+api_sources:
+  wazuh_manager:
+    type: wazuh
+    url: https://127.0.0.1:55000
+    username: wazuh-wui
+    # password: set via NEKOWATCH_API_SOURCE_WAZUH_MANAGER_PASSWORD
+    verify_ssl: false
+    poll_interval: 5
+    description: "Wazuh Manager REST API (/alerts)"
+
+  http_json:
+    type: generic
+    url: https://example.com/api/alerts
+    # token: set via NEKOWATCH_API_SOURCE_HTTP_JSON_TOKEN
+    response_format: json_array
+    # items_path: data.alerts
+    # cursor_param: since
+    poll_interval: 10
+    verify_ssl: true
+    description: "Произвольный HTTP JSON/NDJSON endpoint"

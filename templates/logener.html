@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ app_name }} — Генератор</title>
+<link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link id="theme-stylesheet" rel="stylesheet" href="/static/css/nekowatch.css">
+<script src="/static/js/theme.js?v={{ app_version }}"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">{{ app_name }} <small>v{{ app_version }}</small></div>
+  <nav>
+    <a href="/">Панель</a>
+    <a href="/logener" class="active">Генератор</a>
+    <a href="/api">API</a>
+    <a href="/docs">Docs</a>
+  </nav>
+  <div class="spacer"></div>
+  <div class="theme-switcher" id="themeSwitcher">
+    <button type="button" data-theme="nekowatch" title="Тёмная тема">Тёмная</button>
+    <button type="button" data-theme="lemongrass" title="Тема Lemongrass">Трава</button>
+    <button type="button" data-theme="sunset" title="Тема Sunset">Закат</button>
+  </div>
+  <label class="demo-toggle" title="Показать учебные устройства на панели">
+    <input type="checkbox" id="demo-mode">
+    <span class="demo-slider"></span>
+    <span class="demo-label">Демо-режим</span>
+  </label>
+  <span class="pill"><span class="dot" id="dot"></span><span id="state">неизвестно</span></span>
+</header>
+
+<main>
+  <section class="grid c2">
+    <div class="card">
+      <h2>Logener — генератор алертов Wazuh</h2>
+      <p class="muted">
+        Пишет алерты Wazuh (NDJSON), которые NekoWatch индексирует.
+        По умолчанию генератор выключен — нажмите <b>Старт</b>, когда нужен поток.
+        Скорость генерации ~4–5 соб/с. «Всего с запуска» — накопительный счётчик;
+        «Генерация сейчас» / «Приём сейчас» — сколько событий за последнюю секунду.
+      </p>
+      <p class="muted" style="margin-top:8px">
+        <b>Полный сброс</b> останавливает генератор, очищает файл алертов
+        <em>и</em> базу SQLite (события, источники, уведомления).
+        Действие необратимо — интерфейс спросит несколько раз и потребует ввод фразы.
+      </p>
+      <p class="muted" style="margin-top:8px">
+        Внешний источник алертов — на вкладке <a href="/api">API</a>.
+      </p>
+      <p class="muted" style="margin-top:8px">
+        Включите <b>Демо-режим</b> в шапке — учебные устройства появятся на
+        <a href="/">панели</a> с пометкой «демо».
+      </p>
+      <p class="muted" style="margin-top:8px">Файл: <code class="mono">{{ log_file }}</code></p>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="btn-start">Старт</button>
+        <button id="btn-stop">Стоп</button>
+        <button id="btn-refresh">Обновить</button>
+        <button id="btn-full-reset" class="danger" title="Очистить БД + JSON">Полный сброс</button>
+      </div>
+    </div>
+    <div class="grid cards">
+      <div class="card"><div class="label">Всего с запуска</div><div class="value acc" id="k-generated">0</div></div>
+      <div class="card"><div class="label">Генерация сейчас</div><div class="value" id="k-rate">0</div></div>
+      <div class="card"><div class="label">Приём сейчас</div><div class="value" id="k-ing-rate">0</div></div>
+      <div class="card"><div class="label">Принято всего</div><div class="value" id="k-ingested">0</div></div>
+      <div class="card"><div class="label">В базе (всего)</div><div class="value" id="k-stored">0</div></div>
+    </div>
+  </section>
+
+  <section class="grid c2">
+    <div class="card"><h2>Статус генератора</h2><pre id="gen-json">—</pre></div>
+    <div class="card"><h2>Конвейер приёма</h2><pre id="ing-json">—</pre></div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+<script>nekowatchWireThemeSwitcher();</script>
+<script src="/static/js/logener.js?v={{ app_version }}"></script>
+</body>
+</html>

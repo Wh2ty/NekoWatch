@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ app_name }} — SOC-панель</title>
+<link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link id="theme-stylesheet" rel="stylesheet" href="/static/css/nekowatch.css">
+<script src="/static/js/theme.js?v={{ app_version }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+{% set sev_labels = {'low': 'Низкий', 'medium': 'Средний', 'high': 'Высокий', 'critical': 'Критический'} %}
+{% set triage_labels = {'new': 'Новый', 'in_progress': 'В работе', 'resolved': 'Закрыт', 'false_positive': 'Ложное'} %}
+{% set interval_labels = {'auto': 'Авто', '1m': '1 мин', '5m': '5 мин', '15m': '15 мин', '1h': '1 час', '6h': '6 часов', '1d': '1 день'} %}
+
+<header class="topbar">
+  <div class="brand">{{ app_name }} <small>v{{ app_version }}</small></div>
+  <nav>
+    <a href="/" class="active">Панель</a>
+    <a href="/logener">Генератор</a>
+    <a href="/api">API</a>
+    <a href="/docs">Docs</a>
+  </nav>
+  <div class="spacer"></div>
+  <div class="theme-switcher" id="themeSwitcher">
+    <button type="button" data-theme="nekowatch" title="Тёмная тема">Тёмная</button>
+    <button type="button" data-theme="lemongrass" title="Тема Lemongrass">Трава</button>
+    <button type="button" data-theme="sunset" title="Тема Sunset">Закат</button>
+  </div>
+  <span class="pill" title="Живой канал WebSocket"><span class="dot" id="live-dot"></span><span id="live-text">подключение…</span></span>
+  <span class="pill" title="Сколько логов принято за последнюю секунду">Соб/с <b id="stat-eps">0</b></span>
+  <span class="pill" title="Всего событий в базе">В БД <b id="stat-stored">0</b></span>
+  <span class="pill">Очередь <b id="stat-queue">0</b></span>
+  <span class="pill">Ошибки <b id="stat-errors">0</b></span>
+</header>
+
+<main class="dash">
+  <div class="demo-banner" id="demo-banner" hidden>
+    <strong>Демо-режим</strong>
+    — учебный сценарий (не из БД). Переключатель — на <a href="/logener">Генераторе</a>.
+  </div>
+
+  <section class="fold" id="fold-ai" data-fold="ai">
+    <div class="fold-head">
+      <button type="button" class="fold-toggle" aria-expanded="true" aria-controls="fold-ai-body">
+        <span class="fold-chevron" aria-hidden="true"></span>
+        <span class="fold-title">Нейросеть · GigaChat</span>
+        <span class="fold-meta" id="ai-meta"></span>
+      </button>
+      <div class="fold-actions">
+        <button type="button" class="primary" id="btn-ai-analyze" title="Корреляция алертов + рекомендации">Анализировать</button>
+      </div>
+    </div>
+    <div class="fold-body" id="fold-ai-body">
+      <div id="ai-panel">
+        <div id="ai-status" class="ai-status muted">
+          Запустите анализ текущей выборки — GigaChat найдёт цепочки атак и даст рекомендации.
+        </div>
+        <div class="grid c2">
+          <div class="subcard">
+            <h3>Корреляция</h3>
+            <div id="ai-correlation" class="scroll ai-scroll"></div>
+          </div>
+          <div class="subcard">
+            <h3>Рекомендации</h3>
+            <div id="ai-recs" class="scroll ai-scroll"></div>
+          </div>
+        </div>
+        <details class="ai-raw-wrap">
+          <summary class="muted">Исходный JSON</summary>
+          <pre id="ai-raw"></pre>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="fold" id="fold-charts" data-fold="charts">
+    <div class="fold-head">
+      <button type="button" class="fold-toggle" aria-expanded="true" aria-controls="fold-charts-body">
+        <span class="fold-chevron" aria-hidden="true"></span>
+        <span class="fold-title">Графики и метрики</span>
+        <span class="fold-meta" id="charts-meta"></span>
+      </button>
+    </div>
+    <div class="fold-body" id="fold-charts-body">
+      <div class="grid cards kpi-strip">
+        <div class="card kpi"><div class="label">События</div><div class="value acc" id="kpi-total">0</div>
+          <div class="label" id="kpi-window">—</div></div>
+        <div class="card kpi"><div class="label">Критические</div><div class="value crit" id="kpi-critical">0</div>
+          <div class="label" id="kpi-open">0 открытых</div></div>
+        <div class="card kpi"><div class="label">Высокие</div><div class="value" id="kpi-high">0</div>
+          <div class="label">уровень 8–11</div></div>
+        <div class="card kpi"><div class="label">IP источников</div><div class="value" id="kpi-ips">0</div>
+          <div class="label">уникальных</div></div>
+        <div class="card kpi"><div class="label">Пользователи</div><div class="value" id="kpi-users">0</div>
+          <div class="label">уникальных</div></div>
+        <div class="card kpi"><div class="label">Правила</div><div class="value" id="kpi-rules">0</div>
+          <div class="label">уникальных</div></div>
+        <div class="card kpi"><div class="label">С флагом mail</div><div class="value" id="kpi-mail">0</div>
+          <div class="label">уровень ≥ 7</div></div>
+      </div>
+
+      <div class="grid c2">
+        <div class="subcard">
+          <h3>События в секунду (JSON) <span class="muted" id="eps-live-label">0 JSON/с</span></h3>
+          <div class="chart"><canvas id="chart-eps"></canvas></div>
+        </div>
+        <div class="subcard">
+          <h3>Распределение по критичности</h3>
+          <div class="chart"><canvas id="chart-severity"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid c1">
+        <div class="subcard">
+          <h3>События во времени</h3>
+          <div class="chart"><canvas id="chart-timeline"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid c3">
+        <div class="subcard">
+          <h3>Топ-10 правил</h3>
+          <div class="chart sm"><canvas id="chart-rules"></canvas></div>
+        </div>
+        <div class="subcard">
+          <h3>Топ IP источников</h3>
+          <div class="chart sm"><canvas id="chart-src"></canvas></div>
+        </div>
+        <div class="subcard">
+          <h3>Топ IP назначений</h3>
+          <div class="chart sm"><canvas id="chart-dst"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid c2">
+        <div class="subcard">
+          <h3>Тактики MITRE ATT&amp;CK</h3>
+          <div class="chart sm"><canvas id="chart-mitre"></canvas></div>
+        </div>
+        <div class="subcard">
+          <h3>Топ пользователей</h3>
+          <div class="chart sm"><canvas id="chart-users"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="fold" id="fold-filters" data-fold="filters">
+    <div class="fold-head">
+      <button type="button" class="fold-toggle" aria-expanded="true" aria-controls="fold-filters-body">
+        <span class="fold-chevron" aria-hidden="true"></span>
+        <span class="fold-title">Фильтры</span>
+        <span class="fold-meta">выборка для графиков и логов</span>
+      </button>
+      <div class="fold-actions">
+        <button type="button" class="sm" id="btn-rules-open" title="Конструктор правил корреляции">Изменение правил</button>
+        <button type="button" class="primary" id="btn-apply">Применить</button>
+        <button type="button" id="btn-reset">Сбросить</button>
+      </div>
+    </div>
+    <div class="fold-body" id="fold-filters-body">
+      <div class="filters">
+        <div class="field">
+          <label for="f-range">Период</label>
+          <select id="f-range">
+            <option value="">Всё время</option>
+            <option value="900">Последние 15 минут</option>
+            <option value="3600">Последний час</option>
+            <option value="21600">Последние 6 часов</option>
+            <option value="86400">Последние 24 часа</option>
+            <option value="604800">Последние 7 дней</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-q">Полнотекстовый поиск</label>
+          <input id="f-q" type="search" placeholder="напр. authentication failed">
+        </div>
+        <div class="field">
+          <label for="f-severity">Критичность</label>
+          <select id="f-severity" multiple>
+            {% for s in severities %}<option value="{{ s }}">{{ sev_labels.get(s, s) }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-triage">Статус triage</label>
+          <select id="f-triage" multiple>
+            {% for s in triage_statuses %}<option value="{{ s }}">{{ triage_labels.get(s, s) }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-technique">Техника MITRE</label>
+          <select id="f-technique">
+            <option value="">Любая</option>
+            {% for t in techniques %}
+            <option value="{{ t.technique_id }}">{{ t.technique_id }} · {{ t.technique_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-tactic">Тактика MITRE</label>
+          <select id="f-tactic">
+            <option value="">Любая</option>
+            {% for t in tactics %}
+            <option value="{{ t.tactic_id }}">{{ t.tactic_id }} · {{ t.tactic_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-rule">ID правила / события</label>
+          <input id="f-rule" type="text" placeholder="5712">
+        </div>
+        <div class="field">
+          <label for="f-src">IP источника</label>
+          <input id="f-src" type="text" placeholder="185.220.101.44">
+        </div>
+        <div class="field">
+          <label for="f-level-min">Уровень мин–макс</label>
+          <div class="row">
+            <input id="f-level-min" type="number" min="0" max="15" placeholder="0" style="width:70px">
+            <input id="f-level-max" type="number" min="0" max="15" placeholder="15" style="width:70px">
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-interval">Гистограмма</label>
+          <select id="f-interval">
+            {% for i in intervals %}<option value="{{ i }}">{{ interval_labels.get(i, i) }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Экспорт</label>
+          <div class="row">
+            <button type="button" class="sm" data-export="csv">CSV</button>
+            <button type="button" class="sm" data-export="json">JSON</button>
+            <button type="button" class="sm" data-export="jsonl">ECS</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="fold" id="fold-status" data-fold="status">
+    <div class="fold-head">
+      <button type="button" class="fold-toggle" aria-expanded="true" aria-controls="fold-status-body">
+        <span class="fold-chevron" aria-hidden="true"></span>
+        <span class="fold-title">Мониторинг устройств</span>
+        <span class="fold-meta" id="status-board-meta">загрузка…</span>
+      </button>
+      <div class="fold-actions">
+        <button type="button" class="primary sm" id="btn-register-open">+ Устройство</button>
+        <button type="button" class="sm" id="btn-status-ping">Пинг</button>
+        <button type="button" class="sm" id="btn-status-refresh">Обновить</button>
+      </div>
+    </div>
+    <div class="fold-body" id="fold-status-body">
+      <div class="status-board" id="status-board">
+        <h3>Источники</h3>
+        <div class="status-cards" id="status-source-cards"></div>
+        <h3>Пользователи LAN</h3>
+        <div class="status-cards" id="status-user-cards"></div>
+        <h3>Уведомления</h3>
+        <ul class="status-alerts" id="status-notifications">
+          <li class="muted">Нет уведомлений</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="fold" id="fold-logs" data-fold="logs">
+    <div class="fold-head">
+      <button type="button" class="fold-toggle" aria-expanded="true" aria-controls="fold-logs-body">
+        <span class="fold-chevron" aria-hidden="true"></span>
+        <span class="fold-title">Логи и прямой эфир</span>
+        <span class="fold-meta" id="alerts-count"></span>
+      </button>
+      <div class="fold-actions">
+        <span class="muted" id="triage-hint">выберите строки</span>
+        <button type="button" class="sm" data-triage="in_progress">В работе</button>
+        <button type="button" class="sm" data-triage="resolved">Закрыть</button>
+        <button type="button" class="sm" data-triage="false_positive">Ложное</button>
+        <button type="button" class="sm" id="btn-prev">‹</button>
+        <button type="button" class="sm" id="btn-next">›</button>
+      </div>
+    </div>
+    <div class="fold-body" id="fold-logs-body">
+      <div class="grid split">
+        <div class="subcard">
+          <h3>Алерты</h3>
+          <div class="scroll">
+            <table>
+              <thead><tr>
+                <th style="width:26px"><input type="checkbox" id="chk-all" aria-label="Выбрать все строки"></th>
+                <th>Время</th><th class="num">Ур.</th><th>Крит.</th><th>Правило</th>
+                <th>Описание</th><th>Источник</th><th>Пользователь</th><th>ATT&amp;CK</th><th>Статус</th>
+              </tr></thead>
+              <tbody id="alerts-body"><tr><td colspan="10" class="empty">Загрузка…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="logs-side">
+          <div class="subcard" style="margin-bottom:12px">
+            <header class="row" style="justify-content:space-between;margin-bottom:8px">
+              <h3 style="margin:0">Прямой эфир</h3>
+              <button type="button" class="sm" id="btn-pause">Пауза</button>
+            </header>
+            <div class="feed" id="feed"><div class="empty">Ожидание событий…</div></div>
+          </div>
+          <div class="subcard">
+            <h3>Brute-force</h3>
+            <div class="row" style="margin-bottom:8px">
+              <input id="bf-window" type="number" value="60" min="1" style="width:74px" title="Окно, секунды">
+              <input id="bf-threshold" type="number" value="5" min="2" style="width:64px" title="Порог попыток">
+              <button type="button" class="sm" id="btn-bf">Найти</button>
+            </div>
+            <div class="scroll" style="max-height:200px">
+              <table><thead><tr><th>Источник</th><th class="num">Попытки</th><th>Довер.</th></tr></thead>
+              <tbody id="bf-body"><tr><td colspan="3" class="empty">Ещё не запускали</td></tr></tbody></table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subcard" style="margin-top:12px">
+        <h3>Скоррелированные группы</h3>
+        <div class="scroll" style="max-height:300px">
+          <table>
+            <thead><tr><th>Сигнатура</th><th>Описание</th><th class="num">Кол-во</th>
+              <th>Первый</th><th>Последний</th><th class="num">Длит.&nbsp;с</th>
+              <th class="num">IP</th><th class="num">Польз.</th></tr></thead>
+            <tbody id="groups-body"><tr><td colspan="8" class="empty">Загрузка…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="register-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="register-title">
+    <header class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 id="register-title" style="margin:0">Регистрация устройства</h2>
+      <button type="button" class="sm" id="btn-register-close">Закрыть</button>
+    </header>
+    <p class="muted" style="margin-bottom:12px">
+      Устройство будет помечено как <b>«свой»</b>. В демо — только в презентации.
+    </p>
+    <form id="register-form" class="register-form">
+      <label>
+        ID агента
+        <input name="agent_id" required maxlength="64" placeholder="например 010" autocomplete="off">
+      </label>
+      <label>
+        Название
+        <input name="name" maxlength="128" placeholder="branch-switch-01" autocomplete="off">
+      </label>
+      <label>
+        IP-адрес
+        <input name="ip_address" required maxlength="64" placeholder="10.0.0.42" pattern="^[\d.:a-fA-F]+$" autocomplete="off">
+      </label>
+      <label>
+        Таймаут событий (сек)
+        <input name="timeout_seconds" type="number" min="10" max="3600" value="60">
+      </label>
+      <div class="row" style="margin-top:8px;justify-content:flex-end">
+        <button type="button" id="btn-register-cancel">Отмена</button>
+        <button type="submit" class="primary">Зарегистрировать</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Custom correlation rules manager -->
+<div class="modal-backdrop" id="rules-modal" hidden>
+  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="rules-title">
+    <header class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 id="rules-title" style="margin:0">Правила корреляции</h2>
+      <button type="button" class="sm" id="btn-rules-close">Закрыть</button>
+    </header>
+    <p class="muted" style="margin-bottom:12px">
+      Конструктор условий для потока логов. При срабатывании порога создаётся уведомление аналитику.
+      Ниже уже есть демо-правила (mock) для проверки интерфейса.
+    </p>
+
+    <div class="rules-layout">
+      <div class="subcard" style="flex:1;min-width:0">
+        <h3>Активные правила <span class="muted" id="rules-count"></span></h3>
+        <div class="scroll" style="max-height:280px">
+          <table>
+            <thead>
+              <tr>
+                <th>Имя</th><th>Условие</th><th>Окно</th><th>Порог</th>
+                <th>Вкл</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="rules-body">
+              <tr><td colspan="6" class="empty">Загрузка…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:10px">
+          <h3>Последние срабатывания</h3>
+          <ul class="status-alerts" id="rules-hits">
+            <li class="muted">Пока нет</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="subcard" style="flex:1;min-width:0">
+        <h3>Конструктор правила</h3>
+        <form id="rules-form" class="register-form">
+          <input type="hidden" name="edit_id" id="rule-edit-id" value="">
+          <label>
+            Название
+            <input name="name" id="rule-name" required maxlength="128" placeholder="Например: брутфорс с одного IP">
+          </label>
+          <label>
+            Описание
+            <input name="description" id="rule-description" maxlength="512" placeholder="Кратко, зачем правило">
+          </label>
+          <div class="row" style="gap:8px;align-items:end">
+            <label style="flex:1">
+              Поле лога
+              <select name="field" id="rule-field" required></select>
+            </label>
+            <label style="flex:1">
+              Оператор
+              <select name="operator" id="rule-operator" required></select>
+            </label>
+          </div>
+          <label>
+            Значение
+            <input name="value" id="rule-value" required maxlength="512" placeholder="5712 или 10.0.0.5 / critical">
+          </label>
+          <div class="row" style="gap:8px;align-items:end">
+            <label style="flex:1">
+              Окно (сек)
+              <input name="window_seconds" id="rule-window" type="number" min="5" max="3600" value="60">
+            </label>
+            <label style="flex:1">
+              Порог
+              <input name="threshold" id="rule-threshold" type="number" min="1" max="10000" value="5">
+            </label>
+            <label style="flex:1">
+              Кулдаун (сек)
+              <input name="cooldown_seconds" id="rule-cooldown" type="number" min="0" max="3600" value="60">
+            </label>
+          </div>
+          <div class="row" style="gap:8px;align-items:end">
+            <label style="flex:1">
+              Группировка
+              <select name="group_by" id="rule-group-by"></select>
+            </label>
+            <label style="flex:1">
+              Критичность уведомления
+              <select name="severity" id="rule-severity"></select>
+            </label>
+          </div>
+          <label class="row" style="gap:8px;align-items:center;margin-top:4px">
+            <input type="checkbox" name="enabled" id="rule-enabled" checked>
+            Включить сразу после сохранения
+          </label>
+          <div class="row" style="margin-top:10px;justify-content:flex-end">
+            <button type="button" id="btn-rule-reset-form">Очистить форму</button>
+            <button type="submit" class="primary" id="btn-rule-save">Создать правило</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="backdrop"></div>
+<aside class="drawer" id="drawer"></aside>
+<div class="toast" id="toast"></div>
+
+<script>nekowatchWireThemeSwitcher();</script>
+<script src="/static/js/dashboard.js?v={{ app_version }}"></script>
+</body>
+</html>

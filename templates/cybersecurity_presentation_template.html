@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Шаблон презентации · Кибербезопасность</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e14;
+    --bg-elevated:#10161f;
+    --bg-card:#0d131b;
+    --grid-line: rgba(58,160,255,0.07);
+    --text-primary:#e6edf3;
+    --text-muted:#7d8b9a;
+    --text-dim:#4a5765;
+    --accent-cold:#3aa0ff;   /* verified / trusted */
+    --accent-alert:#ff3b3b;  /* threat / breach */
+    --accent-warn:#ffb020;   /* warning / pending */
+    --border: rgba(230,237,243,0.09);
+    --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text-primary);
+    font-family:var(--sans);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- Ambient background: hex grid + scanline ---------- */
+  .bg-grid{
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 42px 42px;
+    animation: drift 26s linear infinite;
+    opacity:.6;
+  }
+  @keyframes drift{ from{background-position:0 0,0 0;} to{background-position:84px 84px,84px 84px;} }
+
+  .bg-scan{
+    position:fixed; left:0; right:0; height:2px; z-index:0; pointer-events:none;
+    background:linear-gradient(90deg, transparent, var(--accent-cold), transparent);
+    opacity:.35; filter:blur(.5px);
+    animation: scan 7s ease-in-out infinite;
+  }
+  @keyframes scan{
+    0%{ top:-2%; opacity:0;}
+    8%{ opacity:.5;}
+    50%{ top:100%; opacity:.5;}
+    58%{ opacity:0;}
+    100%{ top:100%; opacity:0;}
+  }
+
+  .bg-vignette{
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background: radial-gradient(ellipse at 50% 40%, transparent 45%, rgba(0,0,0,.55) 100%);
+  }
+
+  /* ---------- Progress bar (radar sweep style) ---------- */
+  .progress-bar{
+    position:fixed; top:0; left:0; height:3px; z-index:50;
+    background: linear-gradient(90deg, var(--accent-cold), var(--accent-warn));
+    box-shadow:0 0 12px rgba(58,160,255,.6);
+    transition:width .45s cubic-bezier(.65,0,.35,1);
+    width:0%;
+  }
+
+  /* ---------- Layout ---------- */
+  .app{ position:relative; z-index:1; height:100vh; width:100vw; }
+  .viewport{ position:relative; height:100%; width:100%; }
+
+  .slide{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; justify-content:center;
+    padding: 6vh 8vw;
+    opacity:0; visibility:hidden;
+    transform: translateX(24px);
+    transition: opacity .5s ease, transform .5s ease, visibility .5s;
+  }
+  .slide.active{
+    opacity:1; visibility:visible; transform:translateX(0);
+  }
+
+  /* Terminal-style eyebrow / prompt header, shared by all slides */
+  .prompt{
+    font-family:var(--mono);
+    font-size:.8rem;
+    color:var(--accent-cold);
+    letter-spacing:.02em;
+    display:flex; align-items:center; gap:.5em;
+    margin-bottom:1.1rem;
+    opacity:.85;
+  }
+  .prompt::before{ content:"›"; color:var(--text-dim); }
+  .prompt .cursor{
+    display:inline-block; width:.55em; height:1.05em; background:var(--accent-cold);
+    animation: blink 1.1s steps(1) infinite; vertical-align:-2px;
+  }
+  @keyframes blink{ 50%{ opacity:0; } }
+
+  h1,h2,h3{ font-family:var(--mono); font-weight:600; margin:0; letter-spacing:-.01em; }
+  h1{ font-size:clamp(2.4rem, 6vw, 4.6rem); line-height:1.02; }
+  h2{ font-size:clamp(1.7rem, 3.4vw, 2.6rem); margin-bottom:1.6rem; }
+  h3{ font-size:1.05rem; color:var(--text-primary); }
+
+  .subtitle{ font-family:var(--sans); color:var(--text-muted); font-size:1.15rem; margin-top:.9rem; max-width:46ch; line-height:1.5; }
+
+  .content-box{ margin-top:1rem; max-width:1200px; }
+
+  /* Placeholder helper — visually marks "to be filled" zones */
+  .ph{
+    border:1px dashed var(--border);
+    border-radius:10px;
+    background:repeating-linear-gradient(135deg, rgba(255,255,255,.015) 0 10px, transparent 10px 20px);
+    color:var(--text-dim);
+    font-family:var(--mono); font-size:.78rem;
+    display:flex; align-items:center; justify-content:center;
+    text-align:center; padding:1rem;
+  }
+
+  /* Tag badges */
+  .badges{ display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.6rem; }
+  .badge{
+    font-family:var(--mono); font-size:.72rem; letter-spacing:.04em;
+    padding:.35em .8em; border:1px solid var(--border); border-radius:5px;
+    color:var(--accent-cold); background:rgba(58,160,255,.06);
+  }
+
+  /* Grid of cards (features / stats) */
+  .grid{ display:grid; gap:1.1rem; }
+  .grid-3{ grid-template-columns:repeat(3, 1fr); }
+  .grid-2{ grid-template-columns:repeat(2, 1fr); }
+
+  .card{
+    background:var(--bg-card); border:1px solid var(--border); border-radius:12px;
+    padding:1.4rem 1.5rem; position:relative; overflow:hidden;
+  }
+  .card::before{
+    content:""; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg, var(--accent-cold), transparent);
+  }
+  .card-icon{ font-family:var(--mono); font-size:.75rem; color:var(--accent-warn); display:block; margin-bottom:.6rem; }
+  .card p{ color:var(--text-muted); font-size:.92rem; line-height:1.5; margin:.4rem 0 0; }
+
+  /* Stat block */
+  .stat-num{ font-family:var(--mono); font-size:2.6rem; color:var(--accent-cold); line-height:1; }
+  .stat-label{ color:var(--text-muted); font-size:.85rem; margin-top:.4rem; }
+
+  /* Table skeleton */
+  table.tpl{ width:100%; border-collapse:collapse; font-size:.92rem; }
+  table.tpl th, table.tpl td{ padding:.75rem 1rem; border-bottom:1px solid var(--border); text-align:left; }
+  table.tpl th{ font-family:var(--mono); color:var(--text-muted); font-weight:500; font-size:.78rem; letter-spacing:.03em; text-transform:uppercase; }
+  .tag-ok{ color:var(--accent-cold); font-family:var(--mono); font-size:.8rem; }
+  .tag-risk{ color:var(--accent-alert); font-family:var(--mono); font-size:.8rem; }
+  .tag-warn{ color:var(--accent-warn); font-family:var(--mono); font-size:.8rem; }
+
+  /* Timeline */
+  .timeline{ position:relative; padding-left:2rem; }
+  .timeline::before{ content:""; position:absolute; left:.4rem; top:.3rem; bottom:.3rem; width:1px; background:var(--border); }
+  .t-item{ position:relative; margin-bottom:1.5rem; }
+  .t-item::before{
+    content:""; position:absolute; left:-2rem; top:.25rem; width:9px; height:9px; border-radius:50%;
+    background:var(--accent-cold); box-shadow:0 0 0 4px rgba(58,160,255,.15);
+  }
+  .t-item .t-tag{ font-family:var(--mono); font-size:.72rem; color:var(--accent-warn); }
+  .t-item h3{ margin:.25rem 0; }
+  .t-item p{ color:var(--text-muted); font-size:.9rem; margin:0; }
+
+  /* Diagram placeholder (architecture slide) */
+  .diagram-frame{
+    height:340px; border-radius:14px; position:relative;
+    border:1px solid var(--border); background:var(--bg-card);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .diagram-frame .node{
+    position:absolute; font-family:var(--mono); font-size:.72rem;
+    padding:.5em .9em; border:1px solid var(--accent-cold); border-radius:6px;
+    color:var(--accent-cold); background:rgba(58,160,255,.05);
+  }
+
+  /* Radar signature element for title slide */
+  .radar{
+    position:absolute; right:8vw; top:50%; transform:translateY(-50%);
+    width:210px; height:210px; border-radius:50%;
+    border:1px solid var(--border);
+    background:
+      radial-gradient(circle, transparent 0 60%, rgba(58,160,255,.04) 61%),
+      repeating-radial-gradient(circle, transparent 0 34px, var(--border) 35px 36px);
+    overflow:hidden;
+  }
+  .radar::before{
+    content:""; position:absolute; inset:0; border-radius:50%;
+    background: conic-gradient(from 0deg, rgba(58,160,255,.55), transparent 30%);
+    animation: sweep 4s linear infinite;
+  }
+  .radar .blip{ position:absolute; width:5px; height:5px; border-radius:50%; background:var(--accent-warn); box-shadow:0 0 8px var(--accent-warn); }
+  @keyframes sweep{ to{ transform:rotate(360deg); } }
+
+  /* ---------- Navigation ---------- */
+  .nav-arrows{ position:fixed; bottom:2.4rem; right:2.4rem; display:flex; gap:.6rem; z-index:40; }
+  .n-arrow{
+    width:42px; height:42px; border-radius:50%;
+    border:1px solid var(--border); background:var(--bg-elevated); color:var(--text-primary);
+    font-size:1.1rem; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition:.2s;
+  }
+  .n-arrow:hover{ border-color:var(--accent-cold); color:var(--accent-cold); }
+
+  .nav-dots{ position:fixed; bottom:2.6rem; left:50%; transform:translateX(-50%); display:flex; gap:.5rem; z-index:40; }
+  .n-dot{
+    width:7px; height:7px; border-radius:50%; border:none; background:var(--border); cursor:pointer; padding:0;
+    transition:.2s;
+  }
+  .n-dot.active{ background:var(--accent-cold); box-shadow:0 0 6px var(--accent-cold); }
+
+  .slide-index{
+    position:fixed; bottom:2.4rem; left:2.4rem; z-index:40;
+    font-family:var(--mono); font-size:.75rem; color:var(--text-dim);
+  }
+  .slide-index b{ color:var(--text-muted); }
+
+  /* ---------- Speaker notes ---------- */
+  .speaker-notes{
+    position:fixed; top:1.4rem; right:1.4rem; z-index:60;
+    max-width:320px; background:var(--bg-elevated); border:1px solid var(--border);
+    border-radius:10px; padding:.9rem 1rem; font-size:.82rem; color:var(--text-muted);
+    transform:translateY(-140%); opacity:0; transition:.3s;
+  }
+  .speaker-notes.open{ transform:translateY(0); opacity:1; }
+  .speaker-notes .n-head{ font-family:var(--mono); font-size:.7rem; color:var(--accent-warn); margin-bottom:.4rem; letter-spacing:.04em; }
+  .notes-hint{
+    position:fixed; top:1.6rem; right:1.6rem; z-index:59;
+    font-family:var(--mono); font-size:.68rem; color:var(--text-dim);
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .bg-grid, .bg-scan, .radar::before{ animation:none !important; }
+  }
+
+  @media (max-width: 780px){
+    .grid-3{ grid-template-columns:1fr; }
+    .grid-2{ grid-template-columns:1fr; }
+    .radar{ display:none; }
+    .nav-arrows{ bottom:1.2rem; right:1.2rem; }
+    .slide-index{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-grid" aria-hidden="true"></div>
+<div class="bg-scan" aria-hidden="true"></div>
+<div class="bg-vignette" aria-hidden="true"></div>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<main class="app">
+  <div class="viewport" id="viewport">
+
+    <!-- Слайд 1: Титул -->
+    <section class="slide active" data-note="Заметка докладчика: приветствие, представление темы и цели презентации.">
+      <div class="prompt">root@soc:~$ init_presentation<span class="cursor"></span></div>
+      <h1>Заголовок<br>презентации</h1>
+      <p class="subtitle">Подзаголовок / краткое описание темы кибербезопасности, которое будет заменено реальным содержанием.</p>
+      <div class="badges">
+        <span class="badge">Тема</span><span class="badge">Раздел</span><span class="badge">Уровень доступа</span><span class="badge">Дата</span>
+      </div>
+      <div class="radar" aria-hidden="true">
+        <span class="blip" style="top:30%; left:64%;"></span>
+        <span class="blip" style="top:58%; left:36%;"></span>
+        <span class="blip" style="top:70%; left:70%;"></span>
+      </div>
+    </section>
+
+    <!-- Слайд 2: Повестка -->
+    <section class="slide" data-note="Заметка: обзор структуры доклада, что будет рассмотрено.">
+      <div class="prompt">ls ./agenda<span class="cursor"></span></div>
+      <h2>Повестка</h2>
+      <div class="content-box grid grid-2">
+        <div class="card"><span class="card-icon">01</span><h3>Пункт повестки</h3><p>Краткое описание раздела доклада.</p></div>
+        <div class="card"><span class="card-icon">02</span><h3>Пункт повестки</h3><p>Краткое описание раздела доклада.</p></div>
+        <div class="card"><span class="card-icon">03</span><h3>Пункт повестки</h3><p>Краткое описание раздела доклада.</p></div>
+        <div class="card"><span class="card-icon">04</span><h3>Пункт повестки</h3><p>Краткое описание раздела доклада.</p></div>
+      </div>
+    </section>
+
+    <!-- Слайд 3: Проблема / Угроза -->
+    <section class="slide" data-note="Заметка: описание проблемы или угрозы, актуальность темы.">
+      <div class="prompt">grep -i "threat" ./context.log<span class="cursor"></span></div>
+      <h2>Проблема / Угроза</h2>
+      <div class="content-box">
+        <div class="ph" style="min-height:220px;">Место для описания угрозы, статистики инцидентов или вектора атаки</div>
+      </div>
+    </section>
+
+    <!-- Слайд 4: Архитектура решения -->
+    <section class="slide" data-note="Заметка: пояснение схемы архитектуры системы или процесса защиты.">
+      <div class="prompt">cat ./architecture.yaml<span class="cursor"></span></div>
+      <h2>Архитектура решения</h2>
+      <div class="content-box">
+        <div class="diagram-frame">
+          <div class="node" style="top:18px; left:24px;">Компонент A</div>
+          <div class="node" style="top:18px; right:24px;">Компонент B</div>
+          <div class="node" style="bottom:18px; left:24px;">Компонент C</div>
+          <div class="node" style="bottom:18px; right:24px;">Компонент D</div>
+          <span class="ph" style="position:absolute; padding:.4em .9em; border:none; background:none;">схема / диаграмма</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Слайд 5: Возможности / Функции -->
+    <section class="slide" data-note="Заметка: ключевые функции или меры защиты.">
+      <div class="prompt">cat ./features.list<span class="cursor"></span></div>
+      <h2>Возможности</h2>
+      <div class="content-box grid grid-3">
+        <div class="card"><span class="card-icon">◆ функция</span><h3>Название функции</h3><p>Описание возможности системы защиты.</p></div>
+        <div class="card"><span class="card-icon">◆ функция</span><h3>Название функции</h3><p>Описание возможности системы защиты.</p></div>
+        <div class="card"><span class="card-icon">◆ функция</span><h3>Название функции</h3><p>Описание возможности системы защиты.</p></div>
+        <div class="card"><span class="card-icon">◆ функция</span><h3>Название функции</h3><p>Описание возможности системы защиты.</p></div>
+        <div class="card"><span class="card-icon">◆ функция</span><h3>Название функции</h3><p>Описание возможности системы защиты.</p></div>
+        <div class="card"><span class="card-icon">◆ функция</span><h3>Название функции</h3><p>Описание возможности системы защиты.</p></div>
+      </div>
+    </section>
+
+    <!-- Слайд 6: Метрики -->
+    <section class="slide" data-note="Заметка: ключевые метрики, KPI, показатели эффективности.">
+      <div class="prompt">tail -f ./metrics.dashboard<span class="cursor"></span></div>
+      <h2>Метрики</h2>
+      <div class="content-box grid grid-3">
+        <div class="card"><div class="stat-num">00%</div><div class="stat-label">Показатель / метрика</div></div>
+        <div class="card"><div class="stat-num">00мс</div><div class="stat-label">Показатель / метрика</div></div>
+        <div class="card"><div class="stat-num">000</div><div class="stat-label">Показатель / метрика</div></div>
+      </div>
+    </section>
+
+    <!-- Слайд 7: Сравнение -->
+    <section class="slide" data-note="Заметка: сравнение подходов, до/после, конкурентный анализ.">
+      <div class="prompt">diff ./before.cfg ./after.cfg<span class="cursor"></span></div>
+      <h2>Сравнение</h2>
+      <div class="content-box">
+        <table class="tpl">
+          <thead><tr><th>Критерий</th><th>Вариант A</th><th>Вариант B</th><th>Статус</th></tr></thead>
+          <tbody>
+            <tr><td>Критерий сравнения</td><td>значение</td><td>значение</td><td><span class="tag-ok">OK</span></td></tr>
+            <tr><td>Критерий сравнения</td><td>значение</td><td>значение</td><td><span class="tag-warn">WARN</span></td></tr>
+            <tr><td>Критерий сравнения</td><td>значение</td><td>значение</td><td><span class="tag-risk">RISK</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Слайд 8: Таймлайн -->
+    <section class="slide" data-note="Заметка: этапы внедрения или хронология инцидента.">
+      <div class="prompt">git log --oneline ./rollout<span class="cursor"></span></div>
+      <h2>Этапы внедрения</h2>
+      <div class="content-box timeline">
+        <div class="t-item"><div class="t-tag">ЭТАП 01</div><h3>Название этапа</h3><p>Описание этапа внедрения или хронологии.</p></div>
+        <div class="t-item"><div class="t-tag">ЭТАП 02</div><h3>Название этапа</h3><p>Описание этапа внедрения или хронологии.</p></div>
+        <div class="t-item"><div class="t-tag">ЭТАП 03</div><h3>Название этапа</h3><p>Описание этапа внедрения или хронологии.</p></div>
+      </div>
+    </section>
+
+    <!-- Слайд 9: Кейс / Цитата -->
+    <section class="slide" data-note="Заметка: разбор кейса, цитата эксперта или вывод из практики.">
+      <div class="prompt">less ./case_study.md<span class="cursor"></span></div>
+      <h2>Кейс</h2>
+      <div class="content-box">
+        <div class="ph" style="min-height:200px;">Место для кейса, цитаты или разбора инцидента</div>
+      </div>
+    </section>
+
+    <!-- Слайд 10: Дорожная карта -->
+    <section class="slide" data-note="Заметка: дальнейшие планы развития и приоритеты.">
+      <div class="prompt">cat ./roadmap.todo<span class="cursor"></span></div>
+      <h2>Дальнейшие планы</h2>
+      <div class="content-box grid grid-2">
+        <div class="card"><span class="card-icon">→</span><h3>Направление развития</h3><p>Описание плана или приоритета.</p></div>
+        <div class="card"><span class="card-icon">→</span><h3>Направление развития</h3><p>Описание плана или приоритета.</p></div>
+        <div class="card"><span class="card-icon">→</span><h3>Направление развития</h3><p>Описание плана или приоритета.</p></div>
+        <div class="card"><span class="card-icon">→</span><h3>Направление развития</h3><p>Описание плана или приоритета.</p></div>
+      </div>
+    </section>
+
+    <!-- Слайд 11: Контакты / Ресурсы -->
+    <section class="slide" data-note="Заметка: контакты, ссылки на ресурсы, вопросы.">
+      <div class="prompt">whoami && cat ./contacts.txt<span class="cursor"></span></div>
+      <h2>Контакты и ресурсы</h2>
+      <div class="content-box grid grid-3">
+        <div class="card"><h3>Имя / роль</h3><p>контакт@example.com</p></div>
+        <div class="card"><h3>Ссылка на ресурс</h3><p>example.com/resource</p></div>
+        <div class="card"><h3>Вопросы</h3><p>Место для контактных данных</p></div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<div class="notes-hint">[N] заметки</div>
+<aside class="speaker-notes" id="speakerNotes">
+  <div class="n-head">ЗАМЕТКИ ДОКЛАДЧИКА</div>
+  <div id="noteText"></div>
+</aside>
+
+<div class="slide-index" id="slideIndex"></div>
+<div class="nav-dots" id="navDots"></div>
+<div class="nav-arrows">
+  <button class="n-arrow" id="prevBtn" aria-label="Предыдущий слайд">‹</button>
+  <button class="n-arrow" id="nextBtn" aria-label="Следующий слайд">›</button>
+</div>
+
+<script>
+(function(){
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const total = slides.length;
+  let current = 0;
+
+  const progressBar = document.getElementById('progressBar');
+  const navDots = document.getElementById('navDots');
+  const slideIndex = document.getElementById('slideIndex');
+  const noteText = document.getElementById('noteText');
+  const speakerNotes = document.getElementById('speakerNotes');
+
+  slides.forEach((_, i) => {
+    const dot = document.createElement('button');
+    dot.className = 'n-dot' + (i === 0 ? ' active' : '');
+    dot.setAttribute('aria-label', 'Слайд ' + (i+1));
+    dot.addEventListener('click', () => goTo(i));
+    navDots.appendChild(dot);
+  });
+  const dots = Array.from(navDots.children);
+
+  function render(){
+    slides.forEach((s, i) => s.classList.toggle('active', i === current));
+    dots.forEach((d, i) => d.classList.toggle('active', i === current));
+    progressBar.style.width = ((current + 1) / total * 100) + '%';
+    slideIndex.innerHTML = '<b>' + String(current+1).padStart(2,'0') + '</b> / ' + String(total).padStart(2,'0');
+    noteText.textContent = slides[current].dataset.note || '—';
+  }
+
+  function goTo(i){
+    current = Math.max(0, Math.min(total - 1, i));
+    render();
+  }
+
+  document.getElementById('prevBtn').addEventListener('click', () => goTo(current - 1));
+  document.getElementById('nextBtn').addEventListener('click', () => goTo(current + 1));
+
+  window.addEventListener('keydown', (e) => {
+    if (['ArrowRight','ArrowDown','PageDown',' '].includes(e.key)) { e.preventDefault(); goTo(current + 1); }
+    if (['ArrowLeft','ArrowUp','PageUp'].includes(e.key)) { e.preventDefault(); goTo(current - 1); }
+    if (e.key === 'Home') goTo(0);
+    if (e.key === 'End') goTo(total - 1);
+    if (e.key.toLowerCase() === 'n') speakerNotes.classList.toggle('open');
+  });
+
+  // Свайпы для тач-устройств
+  let touchX = null;
+  window.addEventListener('touchstart', e => touchX = e.touches[0].clientX);
+  window.addEventListener('touchend', e => {
+    if (touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 50) goTo(current + (dx < 0 ? 1 : -1));
+    touchX = null;
+  });
+
+  render();
+})();
+</script>
+
+</body>
+</html>

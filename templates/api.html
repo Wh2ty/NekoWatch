@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ app_name }} — API</title>
+<link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link id="theme-stylesheet" rel="stylesheet" href="/static/css/nekowatch.css">
+<script src="/static/js/theme.js?v={{ app_version }}"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">{{ app_name }} <small>v{{ app_version }}</small></div>
+  <nav>
+    <a href="/">Панель</a>
+    <a href="/logener">Генератор</a>
+    <a href="/api" class="active">API</a>
+    <a href="/docs">Docs</a>
+  </nav>
+  <div class="spacer"></div>
+  <div class="theme-switcher" id="themeSwitcher">
+    <button type="button" data-theme="nekowatch" title="Тёмная тема">Тёмная</button>
+    <button type="button" data-theme="lemongrass" title="Тема Lemongrass">Трава</button>
+    <button type="button" data-theme="sunset" title="Тема Sunset">Закат</button>
+  </div>
+  <span class="pill" id="api-live-pill"><span class="dot" id="api-dot"></span><span id="api-live-text">не подключено</span></span>
+</header>
+
+<main>
+  <section class="card api-page-card">
+    <h2>Подключение внешнего API</h2>
+    <p class="muted">
+      Укажите URL источника алертов Wazuh (JSON / NDJSON или Wazuh Manager)
+      и нажмите <b>Подключить</b>. Опрос пойдёт в реальном времени — события
+      сразу появятся на <a href="/">панели</a>.
+    </p>
+
+    <div class="api-page-form">
+      <label class="field api-url-field">
+        <span>URL API</span>
+        <input id="api-url" type="text" placeholder="https://127.0.0.1:55000  или  https://host/api/alerts" autocomplete="off">
+      </label>
+
+      <div class="api-page-row">
+        <label class="field">
+          <span>Тип</span>
+          <select id="api-type">
+            <option value="generic">JSON / NDJSON</option>
+            <option value="wazuh">Wazuh Manager</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Интервал опроса, сек</span>
+          <input id="api-interval" type="number" min="1" max="300" value="5">
+        </label>
+        <label class="field">
+          <span>Токен (необязательно)</span>
+          <input id="api-token" type="password" placeholder="Bearer token" autocomplete="off">
+        </label>
+      </div>
+
+      <div class="api-page-row api-wazuh-auth" id="api-wazuh-auth" hidden>
+        <label class="field">
+          <span>Логин Wazuh</span>
+          <input id="api-user" type="text" placeholder="wazuh-wui" autocomplete="off">
+        </label>
+        <label class="field">
+          <span>Пароль Wazuh</span>
+          <input id="api-pass" type="password" placeholder="••••••••" autocomplete="off">
+        </label>
+      </div>
+
+      <div class="row api-page-actions">
+        <button class="primary" id="btn-api-connect" type="button">Подключить</button>
+        <button id="btn-api-disconnect" type="button" disabled>Отключить</button>
+        <button id="btn-api-refresh" type="button">Обновить статус</button>
+      </div>
+
+      <p class="api-status-line" id="api-connect-status">Нет активного подключения.</p>
+    </div>
+  </section>
+
+  <section class="grid c2">
+    <div class="card">
+      <h2>Статус API</h2>
+      <pre id="api-json">—</pre>
+    </div>
+    <div class="card">
+      <h2>Как пользоваться</h2>
+      <ul class="api-help">
+        <li><b>JSON / NDJSON</b> — прямой URL, который отдаёт массив алертов или NDJSON.</li>
+        <li><b>Wazuh Manager</b> — базовый URL менеджера (например <code class="mono">https://host:55000</code>), логин и пароль.</li>
+        <li>После подключения алерты идут в тот же конвейер, что и генератор / файлы.</li>
+        <li>Технический REST: <code class="mono">POST /api/v1/ingest/connect</code> · <a href="/docs">Swagger Docs</a></li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+<script>nekowatchWireThemeSwitcher();</script>
+<script src="/static/js/api_connect.js?v={{ app_version }}"></script>
+</body>
+</html>

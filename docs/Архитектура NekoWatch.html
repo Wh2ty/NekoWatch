@@ -1,0 +1,233 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Архитектура NekoWatch</title>
+<style>
+  :root{
+    /* layout: single pipeline flow top-to-bottom, fanning out into four
+       consumer services, then folded into a folder map below it */
+    --bg:#f7f9fb; --panel:#ffffff; --panel-2:#eef2f5; --border:#d7dee5;
+    --text:#10151c; --dim:#52606d; --faint:#8695a3;
+    --accent:#0f8c80; --accent-soft:#e3f6f3;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans","Segoe UI",sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#070b12; --panel:#0e1520; --panel-2:#121a26; --border:#1f2a3a;
+      --text:#e8eef7; --dim:#93a4b8; --faint:#5f738c;
+      --accent:#2dd4bf; --accent-soft:rgba(45,212,191,.12);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#070b12; --panel:#0e1520; --panel-2:#121a26; --border:#1f2a3a;
+    --text:#e8eef7; --dim:#93a4b8; --faint:#5f738c;
+    --accent:#2dd4bf; --accent-soft:rgba(45,212,191,.12);
+    color-scheme: dark;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.55 var(--sans); padding:28px 16px 56px;
+  }
+  .wrap{max-width:980px; margin:0 auto;}
+
+  header{margin-bottom:28px}
+  h1{
+    font:650 clamp(22px,4vw,30px)/1.2 var(--sans); margin:0 0 6px;
+    letter-spacing:-.01em;
+  }
+  header p{margin:0; color:var(--dim); font-size:14px; max-width:62ch}
+
+  h2{
+    font:600 13px/1 var(--mono); text-transform:uppercase; letter-spacing:.06em;
+    color:var(--accent); margin:0 0 14px; padding-top:2px;
+  }
+  section{margin-bottom:40px}
+
+  figure{margin:0}
+  figcaption{
+    margin-top:10px; color:var(--faint); font-size:12.5px; max-width:68ch;
+  }
+  svg{display:block; width:100%; height:auto; max-width:100%;}
+  svg text{font-family:var(--sans); fill:currentColor}
+  .mono{font-family:var(--mono)}
+
+  .layer-grid{
+    display:grid; grid-template-columns:150px 1fr; gap:1px;
+    background:var(--border); border:1px solid var(--border);
+    border-radius:10px; overflow:hidden; font-size:13.5px;
+  }
+  .layer-grid > div{background:var(--panel); padding:10px 14px;}
+  .layer-grid > div.k{
+    font-family:var(--mono); font-size:12px; color:var(--accent);
+    background:var(--panel-2); display:flex; align-items:center;
+  }
+  .layer-grid > div.v{color:var(--dim)}
+  .layer-grid > div.v b{color:var(--text); font-weight:600}
+
+  .tree{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto;
+  }
+  .tree pre{
+    margin:0; font-family:var(--mono); font-size:12.5px; line-height:1.65;
+    color:var(--dim); white-space:pre;
+  }
+  .tree pre .dir{color:var(--accent); font-weight:600}
+  .tree pre .note{color:var(--faint)}
+
+  footer{
+    margin-top:8px; padding-top:16px; border-top:1px solid var(--border);
+    color:var(--faint); font-size:12px;
+  }
+
+  @media (max-width:640px){
+    .layer-grid{grid-template-columns:1fr}
+    .layer-grid > div.k{padding-bottom:0}
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Архитектура NekoWatch</h1>
+    <p>Путь одного события от строки в файле Wazuh/Logener до пикселя на дашборде — и слои кода, через которые оно проходит.</p>
+  </header>
+
+  <section>
+    <h2>01 · Путь события</h2>
+    <figure>
+      <svg viewBox="0 0 920 520" role="img" aria-label="Строка лога читается IngestionService, пишется в SQLite одной транзакцией с checkpoint-офсетом, затем расходится в LiveHub для WebSocket, RuleEngine и StatusMonitor для уведомлений, и в сервисы Query/Analytics/Correlation/Triage/Export, которые через роутеры REST API отдаются в браузер.">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- source -->
+        <rect x="330" y="10" width="260" height="46" rx="8" fill="none" stroke="currentColor" opacity=".55"/>
+        <text x="460" y="30" text-anchor="middle" font-size="13" font-weight="600">alerts.json / wazuh_alerts.json</text>
+        <text x="460" y="46" text-anchor="middle" font-size="11" opacity=".6">config/sources.yaml → путь</text>
+
+        <line x1="460" y1="56" x2="460" y2="94" stroke="currentColor" opacity=".7" marker-end="url(#arrow)"/>
+        <text x="472" y="80" font-size="11" opacity=".65">tail + parse (aiofiles)</text>
+
+        <!-- ingestion -->
+        <rect x="320" y="96" width="280" height="54" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+        <text x="460" y="118" text-anchor="middle" font-size="13.5" font-weight="700">IngestionService</text>
+        <text x="460" y="136" text-anchor="middle" font-size="11" opacity=".7">очередь + батч</text>
+
+        <line x1="460" y1="150" x2="460" y2="188" stroke="currentColor" opacity=".7" marker-end="url(#arrow)"/>
+        <text x="472" y="174" font-size="11" opacity=".65">batch insert + checkpoint, 1 транзакция</text>
+
+        <!-- storage -->
+        <rect x="320" y="190" width="280" height="54" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="460" y="212" text-anchor="middle" font-size="13.5" font-weight="700">SQLite (WAL + FTS5)</text>
+        <text x="460" y="230" text-anchor="middle" font-size="11" opacity=".7">SQLAlchemy async · aiosqlite</text>
+
+        <!-- fan out lines from ingestion+storage to 4 consumers -->
+        <line x1="460" y1="150" x2="150" y2="300" stroke="currentColor" opacity=".55" marker-end="url(#arrow)"/>
+        <line x1="460" y1="150" x2="380" y2="300" stroke="currentColor" opacity=".55" marker-end="url(#arrow)"/>
+        <line x1="460" y1="244" x2="590" y2="300" stroke="currentColor" opacity=".55" marker-end="url(#arrow)"/>
+        <line x1="460" y1="244" x2="800" y2="300" stroke="currentColor" opacity=".55" marker-end="url(#arrow)"/>
+
+        <text x="150" y="284" text-anchor="middle" font-size="10.5" opacity=".6">событие, до записи</text>
+        <text x="800" y="284" text-anchor="middle" font-size="10.5" opacity=".6">по запросу / выборке</text>
+
+        <!-- 4 consumer boxes -->
+        <g>
+          <rect x="30" y="302" width="240" height="56" rx="8" fill="none" stroke="currentColor" opacity=".8"/>
+          <text x="150" y="326" text-anchor="middle" font-size="12.5" font-weight="600">LiveHub</text>
+          <text x="150" y="343" text-anchor="middle" font-size="10.5" opacity=".65">live-лента по WebSocket</text>
+        </g>
+        <g>
+          <rect x="280" y="302" width="200" height="56" rx="8" fill="none" stroke="currentColor" opacity=".8"/>
+          <text x="380" y="326" text-anchor="middle" font-size="12.5" font-weight="600">RuleEngine</text>
+          <text x="380" y="343" text-anchor="middle" font-size="10.5" opacity=".65">окна + пороги → уведомление</text>
+        </g>
+        <g>
+          <rect x="500" y="302" width="180" height="56" rx="8" fill="none" stroke="currentColor" opacity=".8"/>
+          <text x="590" y="326" text-anchor="middle" font-size="12.5" font-weight="600">StatusMonitor</text>
+          <text x="590" y="343" text-anchor="middle" font-size="10.5" opacity=".65">тишина источника, ping LAN</text>
+        </g>
+        <g>
+          <rect x="700" y="302" width="200" height="56" rx="8" fill="none" stroke="currentColor" opacity=".8"/>
+          <text x="800" y="320" text-anchor="middle" font-size="12.5" font-weight="600">Query / Analytics /</text>
+          <text x="800" y="336" text-anchor="middle" font-size="12.5" font-weight="600">Correlation / Triage / Export</text>
+        </g>
+
+        <!-- down to routers -->
+        <line x1="150" y1="358" x2="150" y2="396" stroke="currentColor" opacity=".55" marker-end="url(#arrow)"/>
+        <line x1="380" y1="358" x2="380" y2="396" stroke="currentColor" opacity=".55" marker-end="url(#arrow)"/>
+        <line x1="590" y1="358" x2="590" y2="396" stroke="currentColor" opacity=".55" marker-end="url(#arrow)"/>
+        <line x1="800" y1="358" x2="800" y2="396" stroke="currentColor" opacity=".55" marker-end="url(#arrow)"/>
+
+        <rect x="30" y="398" width="870" height="48" rx="8" fill="var(--panel-2)" stroke="currentColor" opacity=".9"/>
+        <text x="465" y="427" text-anchor="middle" font-size="12.5" font-weight="600">routers/ — REST + WS + Jinja2-страницы (FastAPI)</text>
+
+        <line x1="465" y1="446" x2="465" y2="470" stroke="currentColor" opacity=".7" marker-end="url(#arrow)"/>
+        <text x="478" y="462" font-size="11" opacity=".65">HTML / JSON / WS-кадр</text>
+
+        <rect x="300" y="472" width="330" height="40" rx="8" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+        <text x="465" y="497" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">браузер аналитика — дашборд</text>
+      </svg>
+      <figcaption>Строка из файла логов доходит до SQLite одной транзакцией вместе со своим checkpoint-офсетом — после сбоя хвост не теряется и не дублируется. От этой точки событие расходится четырьмя путями: мгновенно в WebSocket, в движок пороговых правил, в мониторинг тишины источников и по запросу — в сервисы аналитики, которые отдаёт HTTP API.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>02 · Слои кода</h2>
+    <div class="layer-grid">
+      <div class="k">config/</div><div class="v">единственное место с путями до файлов Wazuh — <b>sources.yaml</b></div>
+      <div class="k">core/</div><div class="v"><b>Settings</b>, DI-контейнер, справочник MITRE, загрузка источников</div>
+      <div class="k">db/</div><div class="v">async SQLAlchemy ORM, модели таблиц, сессии, WAL</div>
+      <div class="k">domain/</div><div class="v">Pydantic-модели алертов, фильтров, правил — форма данных, без логики</div>
+      <div class="k">repositories/</div><div class="v">протокол <b>LogRepository</b> + SQLAlchemy-реализация — СУБД заменяема без правок выше</div>
+      <div class="k">services/</div><div class="v">вся бизнес-логика: приём, live, запросы, аналитика, корреляция, triage, правила, экспорт</div>
+      <div class="k">routers/</div><div class="v">HTTP/WS-эндпоинты — тонкий слой поверх сервисов, своей логики не содержит</div>
+      <div class="k">templates/<br>static/</div><div class="v">Jinja2-страницы, JS-дашборд, 3 CSS-темы</div>
+      <div class="k">logener/</div><div class="v">автономный генератор демо-алертов банковского SOC (не ходит в сеть)</div>
+      <div class="k">soc_ai_analyzer.py</div><div class="v">клиент GigaChat — опциональная надстройка, не часть основного пайплайна</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>03 · Структура репозитория</h2>
+    <div class="tree">
+<pre><span class="dir">NekoWatch-main/</span>
+├── app.py                    <span class="note">точка входа: фабрика FastAPI, lifespan</span>
+├── <span class="dir">config/</span>sources.yaml       <span class="note">какие файлы Wazuh слушать</span>
+├── <span class="dir">core/</span>
+│   ├── config.py             <span class="note">Settings (env NEKOWATCH_*)</span>
+│   ├── container.py          <span class="note">сборка всех сервисов на старте</span>
+│   ├── mitre.py               <span class="note">таблица ATT&CK rule→technique</span>
+│   └── sources_config.py, api_sources_config.py
+├── <span class="dir">db/</span>            base.py · models.py · session.py
+├── <span class="dir">domain/</span>        models.py · queries.py · rules.py · status.py · stream.py
+├── <span class="dir">repositories/</span>  base.py (протокол) · sqlalchemy_repo.py · rules_repo.py · status_repo.py
+├── <span class="dir">services/</span>
+│   ├── ingestion.py           <span class="note">хвост файла → очередь → батч-запись</span>
+│   ├── parser.py, matching.py <span class="note">разбор строки, сопоставление паттернов</span>
+│   ├── live.py                <span class="note">LiveHub, рассылка по WebSocket</span>
+│   ├── rule_engine.py         <span class="note">пользовательские правила корреляции</span>
+│   ├── status_monitor.py      <span class="note">тишина источника, ping LAN</span>
+│   ├── query.py, analytics.py, correlation.py, triage.py, export.py
+│   └── api_ingest.py, eps_meter.py, ping.py
+├── <span class="dir">routers/</span>       pages · system · logs · analytics · correlation · triage
+│               export · stream (WS) · ingest · logener · status · rules · ai
+├── <span class="dir">templates/</span>     index.html · logener.html · api.html
+├── <span class="dir">static/</span>
+│   ├── <span class="dir">css/</span>       nekowatch.css · lemongrass_nekowatch.css · alt_nekowatch.css
+│   └── <span class="dir">js/</span>        dashboard.js · theme.js · logener.js · api_connect.js
+├── <span class="dir">logener/</span>logener2.py      <span class="note">генератор демо-алертов банковского SOC</span>
+├── soc_ai_analyzer.py        <span class="note">клиент GigaChat</span>
+├── <span class="dir">tests/</span>          61 тест · pytest-asyncio
+└── <span class="dir">docs/</span>           COMMISSION · PRESENTATION · UI_GUIDE · EPS_AND_HOSTS
+</pre>
+    </div>
+  </section>
+
+  <footer>Схема отражает текущую структуру проекта NekoWatch (ветка main).</footer>
+</div>
+
+</body></html>
